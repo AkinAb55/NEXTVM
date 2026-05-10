@@ -1,75 +1,42 @@
-name: Android CI
+name: Android Build
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+      - master
   pull_request:
-    branches: [ main ]
-
-concurrency:
-  group: build-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   build:
-    name: Build & Lint
     runs-on: ubuntu-latest
-    timeout-minutes: 40
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: 'gradle'
+          distribution: temurin
+          java-version: 17
 
-      # Отключаем Develocity injection — главная причина ошибки
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
-          gradle-home-cache-includes: |
-            caches
-            notifications
-            wrappers
-          # Отключаем injection
-          add-job-summary: false
-          dependency-graph: disabled
+      - name: Fix gradlew permissions
+        run: chmod +x ./gradlew
 
-      - name: Grant execute permission
-        run: chmod +x gradlew
+      # ВАЖНО:
+      # фикс поврежденных JVM args в gradlew
+      - name: Fix gradlew JVM opts
+        run: |
+          sed -i 's/DEFAULT_JVM_OPTS=.*/DEFAULT_JVM_OPTS=""/g' gradlew
 
-      - name: Build Debug APK
-        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
-        env:
-          GRADLE_OPTS: "-Xmx4096m -Dfile.encoding=UTF-8"
-          # Дополнительная защита
-          JAVA_TOOL_OPTIONS: "-Dfile.encoding=UTF-8"
+      - name: Build APK
+        run: ./gradlew assembleDebug --stacktrace --no-daemon
 
-      - name: Run Lint
-        if: always()
-        run: ./gradlew lint --no-daemon || true
-        env:
-          GRADLE_OPTS: "-Xmx3072m -Dfile.encoding=UTF-8"
-
-      - name: Upload Debug APK
-        if: success()
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: debug-apk
-          path: app/build/outputs/apk/debug/*.apk
-          retention-days: 7
-
-      - name: Upload Lint Reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: lint-reports
+          name: NEXTVM-debug
           path: |
-            **/build/reports/lint-results*.html
-            **/build/reports/lint-results*.xml
-          retention-days: 7
+            app/build/outputs/apk/debug/*.apk
+            */build/outputs/apk/debug/*.apk

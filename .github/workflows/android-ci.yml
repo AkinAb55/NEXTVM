@@ -14,7 +14,7 @@ jobs:
   build:
     name: Build & Lint
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
 
     steps:
       - name: Checkout code
@@ -25,12 +25,20 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: 'gradle'               # ← важно
+          cache: 'gradle'
 
+      # Отключаем Develocity injection — главная причина ошибки
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+          gradle-home-cache-includes: |
+            caches
+            notifications
+            wrappers
+          # Отключаем injection
+          add-job-summary: false
+          dependency-graph: disabled
 
       - name: Grant execute permission
         run: chmod +x gradlew
@@ -38,11 +46,15 @@ jobs:
       - name: Build Debug APK
         run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
         env:
-          GRADLE_OPTS: "-Xmx4096m -Dfile.encoding=UTF-8"   # ← передаём явно
+          GRADLE_OPTS: "-Xmx4096m -Dfile.encoding=UTF-8"
+          # Дополнительная защита
+          JAVA_TOOL_OPTIONS: "-Dfile.encoding=UTF-8"
 
       - name: Run Lint
         if: always()
         run: ./gradlew lint --no-daemon || true
+        env:
+          GRADLE_OPTS: "-Xmx3072m -Dfile.encoding=UTF-8"
 
       - name: Upload Debug APK
         if: success()
